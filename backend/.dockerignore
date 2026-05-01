@@ -1,0 +1,10 @@
+.env
+.env.*
+credentials/
+__pycache__/
+**/__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.git/
