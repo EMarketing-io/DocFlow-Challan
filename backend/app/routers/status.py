@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.services.sheets import (
     update_item_delivered,
     update_challan_status,
+    batch_update_delivered,
     get_challan_by_id,
     get_line_items_by_challan,
     batch_update_image_urls,
@@ -18,6 +19,15 @@ router = APIRouter()
 
 class DeliveryUpdate(BaseModel):
     delivered: bool
+
+
+class BatchDeliveryItem(BaseModel):
+    item_id: str
+    delivered: bool
+
+
+class BatchDeliveryUpdate(BaseModel):
+    updates: list[BatchDeliveryItem]
 
 
 class StatusUpdate(BaseModel):
@@ -38,6 +48,12 @@ def set_item_delivered(challan_id: str, item_id: str, body: DeliveryUpdate):
     if not ok:
         raise HTTPException(status_code=404, detail="Item not found")
     return {"updated": True}
+
+
+@router.patch("/challans/{challan_id}/items/batch-delivered")
+def batch_set_items_delivered(challan_id: str, body: BatchDeliveryUpdate):
+    n = batch_update_delivered([u.model_dump() for u in body.updates])
+    return {"updated": n}
 
 
 def _bg_reprocess(pdf_bytes: bytes, items: list[dict], challan_no: str) -> None:

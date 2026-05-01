@@ -171,6 +171,70 @@ def update_challan_status(challan_id: str, status: str) -> bool:
     return False
 
 
+def get_all_item_counts() -> dict:
+    """Returns {challan_id: {"total": int, "delivered": int}} by reading line_items once."""
+    service = _get_service()
+    res = _sheet(service).get(
+        spreadsheetId=settings.google_sheet_id,
+        range="line_items!A1:Z100000",
+    ).execute()
+    rows = res.get("values", [])
+    if len(rows) < 2:
+        return {}
+    headers = rows[0]
+    if "challan_id" not in headers or "delivered" not in headers:
+        return {}
+    cid_col = headers.index("challan_id")
+    del_col = headers.index("delivered")
+    counts: dict = {}
+    for row in rows[1:]:
+        cid = row[cid_col].strip() if len(row) > cid_col else ""
+        if not cid:
+            continue
+        if cid not in counts:
+            counts[cid] = {"total": 0, "delivered": 0}
+        counts[cid]["total"] += 1
+        del_val = row[del_col].strip().upper() if len(row) > del_col else ""
+        if del_val == "TRUE":
+            counts[cid]["delivered"] += 1
+    return counts
+
+
+def batch_update_delivered(updates: list[dict]) -> int:
+    """Write delivered status for multiple items in one batchUpdate. Returns count written."""
+    if not updates:
+        return 0
+    service = _get_service()
+    res = _sheet(service).get(
+        spreadsheetId=settings.google_sheet_id,
+        range="line_items!A1:Z100000",
+    ).execute()
+    rows = res.get("values", [])
+    if len(rows) < 2:
+        return 0
+    headers = rows[0]
+    if "id" not in headers or "delivered" not in headers:
+        return 0
+    id_col = headers.index("id")
+    del_col = headers.index("delivered")
+    col_letter = chr(ord("A") + del_col)
+    update_map = {u["item_id"]: u["delivered"] for u in updates}
+    data = []
+    for idx, row in enumerate(rows[1:], start=2):
+        item_id = row[id_col].strip() if len(row) > id_col else ""
+        if item_id in update_map:
+            data.append({
+                "range": f"line_items!{col_letter}{idx}",
+                "values": [["TRUE" if update_map[item_id] else "FALSE"]],
+            })
+    if data:
+        _sheet(service).batchUpdate(
+            spreadsheetId=settings.google_sheet_id,
+            body={"valueInputOption": "RAW", "data": data},
+        ).execute()
+    return len(data)
+
+
 def _col_letter(index: int) -> str:
     """Convert 0-based column index to spreadsheet letter (supports AA, AB, ...)."""
     result = ""

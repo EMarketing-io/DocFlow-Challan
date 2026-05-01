@@ -36,6 +36,14 @@ export async function updateItemDelivered(challanId: string, itemId: string, del
   return res.data;
 }
 
+export async function batchUpdateItemsDelivered(
+  challanId: string,
+  updates: { item_id: string; delivered: boolean }[]
+) {
+  const res = await api.patch(`/api/challans/${challanId}/items/batch-delivered`, { updates });
+  return res.data;
+}
+
 export async function reprocessImages(challanId: string) {
   const res = await api.post(`/api/challans/${challanId}/reprocess-images`);
   return res.data;

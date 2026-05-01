@@ -15,6 +15,8 @@ export interface ChallanSummary {
   pdf_url: string;
   status: "pending" | "done";
   created_at: string;
+  total_items?: number;
+  delivered_items?: number;
 }
 
 export interface LineItem {

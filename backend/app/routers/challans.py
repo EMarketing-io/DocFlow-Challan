@@ -3,6 +3,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import Response
 from app.services.sheets import (
     get_all_challans,
+    get_all_item_counts,
     get_challan_by_id,
     get_line_items_by_challan,
     delete_challan,
@@ -14,7 +15,13 @@ router = APIRouter()
 
 @router.get("/challans")
 def list_challans():
-    return get_all_challans()
+    challans = get_all_challans()
+    counts = get_all_item_counts()
+    for c in challans:
+        cid = c.get("id", "")
+        c["total_items"] = counts.get(cid, {}).get("total", 0)
+        c["delivered_items"] = counts.get(cid, {}).get("delivered", 0)
+    return challans
 
 
 @router.get("/challans/{challan_id}")

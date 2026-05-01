@@ -1,9 +1,10 @@
 "use client";
 
 import { use, useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import useSWR from "swr";
-import { API_URL, updateChallanStatus, updateItemDelivered, reprocessImages } from "@/lib/api";
+import { API_URL, updateChallanStatus, batchUpdateItemsDelivered, reprocessImages } from "@/lib/api";
 import type { ChallanDetail, LineItem } from "@/lib/types";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -17,11 +18,10 @@ const SIZE_LABELS = ["2XL", "3XL", "4XL", "5XL", "6XL", "L", "M", "S", "XL"];
 function MetaField({ label, value }: { label: string; value?: string }) {
   const clean = value?.trim();
   if (!clean) return null;
-  const value2 = clean;
   return (
     <div className="space-y-0.5">
       <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--faint)" }}>{label}</p>
-      <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{value2}</p>
+      <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{clean}</p>
     </div>
   );
 }
@@ -66,17 +66,31 @@ const isDelivered = (item: LineItem) =>
 
 export default function ChallanDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const { data, isLoading, error, mutate } = useSWR<ChallanDetail>(
     `${API_URL}/api/challans/${id}`,
     fetcher,
-    // Poll every 12s so images auto-appear once background upload finishes
     { refreshInterval: 12000 }
   );
 
   const [status, setStatus] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryDone, setRetryDone] = useState(false);
+  const [localDelivered, setLocalDelivered] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState(false);
   const autoTriggered = useRef(false);
+  const initializedRef = useRef(false);
+
+  // Initialize localDelivered from fetched data (once)
+  useEffect(() => {
+    if (!data || initializedRef.current) return;
+    const map: Record<string, boolean> = {};
+    for (const item of data.line_items ?? []) {
+      map[item.id] = isDelivered(item);
+    }
+    setLocalDelivered(map);
+    initializedRef.current = true;
+  }, [data]);
 
   const handleRetryImages = async () => {
     setRetrying(true);
@@ -84,13 +98,12 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
       await reprocessImages(id);
       setRetryDone(true);
     } catch {
-      // ignore — server will log
+      // ignore
     } finally {
       setRetrying(false);
     }
   };
 
-  // Auto-reprocess once when data loads and images are missing
   useEffect(() => {
     if (!data || autoTriggered.current) return;
     const items = data.line_items ?? [];
@@ -110,9 +123,19 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
     await updateChallanStatus(id, next);
   };
 
-  const handleDelivered = async (item: LineItem, val: boolean) => {
-    await updateItemDelivered(id, item.id, val);
-    mutate();
+  const handleSave = async () => {
+    if (!data) return;
+    setSaving(true);
+    try {
+      const updates = Object.entries(localDelivered).map(([item_id, delivered]) => ({
+        item_id,
+        delivered,
+      }));
+      await batchUpdateItemsDelivered(id, updates);
+      router.push("/");
+    } catch {
+      setSaving(false);
+    }
   };
 
   if (error) {
@@ -135,7 +158,7 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
   }
 
   const items = data.line_items ?? [];
-  const deliveredCount = items.filter(isDelivered).length;
+  const localDeliveredCount = Object.values(localDelivered).filter(Boolean).length;
   const totalAmount = items.reduce((s, i) => s + Number(i.amount || 0), 0);
   const hasImages = items.some((i) => i.image_url);
 
@@ -172,26 +195,54 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
           </button>
         </div>
 
-        {data.pdf_url && (
-          <a
-            href={data.pdf_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-medium border transition-opacity hover:opacity-80 self-start sm:self-auto"
-            style={{
-              background: "var(--surface)",
-              color: "var(--text)",
-              borderColor: "var(--border)",
-              boxShadow: "var(--shadow)",
-            }}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {data.pdf_url && (
+            <a
+              href={data.pdf_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-medium border transition-opacity hover:opacity-80"
+              style={{
+                background: "var(--surface)",
+                color: "var(--text)",
+                borderColor: "var(--border)",
+                boxShadow: "var(--shadow)",
+              }}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              View PDF
+            </a>
+          )}
+
+          {/* Save button */}
+          <button
+            onClick={handleSave}
+            disabled={saving || items.length === 0}
+            className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
+            style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            View PDF
-          </a>
-        )}
+            {saving ? (
+              <>
+                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Saving…
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M5 13l4 4L19 7" />
+                </svg>
+                Save & Back
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Metadata card */}
@@ -272,7 +323,7 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
             )}
           </div>
           <span className="text-xs" style={{ color: "var(--muted)" }}>
-            {deliveredCount} of {items.length} delivered
+            {localDeliveredCount} of {items.length} ticked
           </span>
         </div>
 
@@ -284,11 +335,11 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-xs border-collapse" style={{ minWidth: hasImages ? "1000px" : "900px" }}>
-                <thead>
+                <thead className="sticky top-14 z-20">
                   <tr style={{ borderBottom: `1px solid var(--border)`, background: "var(--surface-2)" }}>
                     {/* Sticky: # */}
                     <th
-                      className="px-3 py-3 text-left font-medium w-10 sticky left-0 z-10"
+                      className="px-3 py-3 text-left font-medium w-10 sticky left-0 z-30"
                       style={{ color: "var(--faint)", background: "var(--surface-2)" }}
                     >
                       #
@@ -296,7 +347,7 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
                     {/* Sticky: Image (only when images exist) */}
                     {hasImages && (
                       <th
-                        className="px-2 py-3 text-left font-medium w-14 sticky left-10 z-10"
+                        className="px-2 py-3 text-left font-medium w-14 sticky left-10 z-30"
                         style={{ color: "var(--muted)", background: "var(--surface-2)" }}
                       >
                         Img
@@ -304,7 +355,7 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
                     )}
                     {/* Sticky: Item Code */}
                     <th
-                      className={`px-4 py-3 text-left font-medium sticky z-10 ${hasImages ? "left-[96px]" : "left-10"}`}
+                      className={`px-4 py-3 text-left font-medium sticky z-30 ${hasImages ? "left-[96px]" : "left-10"}`}
                       style={{ color: "var(--muted)", background: "var(--surface-2)" }}
                     >
                       Item Code
@@ -322,7 +373,7 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
                 </thead>
                 <tbody>
                   {items.map((item, idx) => {
-                    const done = isDelivered(item);
+                    const done = localDelivered[item.id] ?? false;
                     const rowBg = done
                       ? "var(--success-bg)"
                       : idx % 2 === 0
@@ -385,7 +436,9 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
                           <input
                             type="checkbox"
                             checked={done}
-                            onChange={(e) => handleDelivered(item, e.target.checked)}
+                            onChange={(e) =>
+                              setLocalDelivered((prev) => ({ ...prev, [item.id]: e.target.checked }))
+                            }
                             className="w-4 h-4 rounded cursor-pointer"
                             style={{ accentColor: "var(--success)" }}
                           />
@@ -404,7 +457,7 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
             >
               <div className="flex items-center gap-4">
                 <span className="text-xs" style={{ color: "var(--muted)" }}>
-                  {deliveredCount} of {items.length} rows delivered
+                  {localDeliveredCount} of {items.length} ticked
                 </span>
                 <div className="hidden sm:block h-3 w-px" style={{ background: "var(--border)" }} />
                 <div
@@ -414,15 +467,25 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
                   <div
                     className="h-full rounded-full transition-all duration-300"
                     style={{
-                      width: `${Math.round((deliveredCount / items.length) * 100)}%`,
+                      width: `${items.length ? Math.round((localDeliveredCount / items.length) * 100) : 0}%`,
                       background: "var(--success)",
                     }}
                   />
                 </div>
               </div>
-              <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--text)" }}>
-                Total: {fmt(totalAmount)}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--text)" }}>
+                  Total: {fmt(totalAmount)}
+                </span>
+                <button
+                  onClick={handleSave}
+                  disabled={saving || items.length === 0}
+                  className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition-opacity hover:opacity-85 disabled:opacity-50"
+                  style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
+                >
+                  {saving ? "Saving…" : "Save & Back"}
+                </button>
+              </div>
             </div>
           </>
         )}
