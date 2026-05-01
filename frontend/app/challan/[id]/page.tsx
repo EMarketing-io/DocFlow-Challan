@@ -266,7 +266,8 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
 
       {/* Line items table */}
       <div
-        className="rounded-xl border overflow-hidden"
+        className="rounded-xl border"
+        style={{ overflow: "clip" }}
         style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow)" }}
       >
         <div
