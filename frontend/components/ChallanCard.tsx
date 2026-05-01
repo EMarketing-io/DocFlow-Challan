@@ -190,12 +190,12 @@ export function ChallanCard({ challan, onDelete }: Props) {
             <div className="flex items-center gap-2 shrink-0">
               {(challan.total_items ?? 0) > 0 && (
                 <span
-                  className="text-xs px-2.5 py-1 rounded-full border font-medium tabular-nums"
-                  style={{ background: "var(--surface-2)", color: "var(--muted)", borderColor: "var(--border)" }}
+                  className="text-sm px-3 py-1.5 rounded-full border font-semibold tabular-nums"
+                  style={{ background: "var(--surface-2)", borderColor: "var(--border)" }}
                 >
                   <span style={{ color: "var(--success)" }}>{challan.delivered_items ?? 0}</span>
-                  <span style={{ color: "var(--faint)" }}>/</span>
-                  {challan.total_items}
+                  <span className="mx-0.5" style={{ color: "var(--faint)" }}>/</span>
+                  <span style={{ color: "var(--text)" }}>{challan.total_items}</span>
                 </span>
               )}
               <button
