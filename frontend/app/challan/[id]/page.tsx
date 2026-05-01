@@ -266,8 +266,8 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
 
       {/* Line items table */}
       <div
-        className="rounded-xl border"
-        style={{ overflow: "clip", background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow)" }}
+        className="rounded-xl border overflow-hidden"
+        style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow)" }}
       >
         <div
           className="px-5 py-3 flex items-center justify-between border-b"
@@ -333,9 +333,9 @@ export default function ChallanDetailPage({ params }: { params: Promise<{ id: st
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto overflow-y-clip">
+            <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 320px)" }}>
               <table className="w-full text-xs border-collapse" style={{ minWidth: hasImages ? "1000px" : "900px" }}>
-                <thead className="sticky top-14 z-20">
+                <thead className="sticky top-0 z-20">
                   <tr style={{ borderBottom: `1px solid var(--border)`, background: "var(--surface-2)" }}>
                     {/* Sticky: # */}
                     <th
