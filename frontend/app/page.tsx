@@ -56,9 +56,6 @@ export default function DashboardPage() {
   const total = challans?.length ?? 0;
   const done = challans?.filter((c) => c.status === "done").length ?? 0;
   const pending = total - done;
-  const totalItems = challans?.reduce((s, c) => s + (c.total_items ?? 0), 0) ?? 0;
-  const deliveredItems = challans?.reduce((s, c) => s + (c.delivered_items ?? 0), 0) ?? 0;
-
   if (!challans || total === 0) {
     return (
       <div className="rounded-xl border p-16 text-center" style={{ background: "var(--surface)", borderColor: "var(--border)" }}>
@@ -99,21 +96,10 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <StatCard label="Total" value={total} />
         <StatCard label="Pending" value={pending} color="var(--warn)" />
         <StatCard label="Delivered" value={done} color="var(--success)" />
-        <div
-          className="rounded-xl border p-4 sm:p-5"
-          style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--shadow)" }}
-        >
-          <p className="text-xs font-medium mb-1" style={{ color: "var(--muted)" }}>Items Done</p>
-          <p className="text-3xl font-semibold tabular-nums" style={{ color: "var(--text)" }}>
-            <span style={{ color: "var(--success)" }}>{deliveredItems}</span>
-            <span className="text-lg font-normal mx-1" style={{ color: "var(--faint)" }}>/</span>
-            <span>{totalItems}</span>
-          </p>
-        </div>
       </div>
 
       {/* List */}
